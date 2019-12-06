@@ -168,8 +168,8 @@ println("Errors: $err1, $err2")
 
 # U = reshape(U, number_of_nodes, number_of_nodes)
 # U_CG = reshape(U_CG, number_of_nodes, number_of_nodes)
-# U_eff_CG = reshape(U_eff_CG, number_of_nodes, number_of_nodes)
-# X, Y = constructDomain(number_of_nodes)
-# fig, ax = PyPlot.subplots()
-# ax.contourf(X,Y,U_eff_CG)
-# fig
+U_eff_CG = reshape(U_eff_CG, number_of_nodes, number_of_nodes)
+X, Y = constructDomain(number_of_nodes)
+fig, ax = PyPlot.subplots()
+ax.contourf(X,Y,U_eff_CG)
+fig
