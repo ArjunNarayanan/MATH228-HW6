@@ -54,9 +54,14 @@ function updateRows(rhs::Vector, cosine::Complex, sine::Complex, row)
     rhs[row+1] = -upper_row_val*conj(sine) + lower_row_val*conj(cosine)
 end
 
-function solveRow(A::Matrix, solution::Vector, rhs::Vector, row, num_cols)
+function solveRow(A::Matrix, solution::Vector{Float64}, rhs::Vector{Float64}, row, num_cols)
         solution[row] = (rhs[row] -
                      dot(A[row,row+1:num_cols],solution[row+1:num_cols]))/A[row,row]
+end
+
+function solveRow(A::Matrix, solution::Vector{ComplexF64}, rhs::Vector{ComplexF64}, row, num_cols)
+        solution[row] = (rhs[row] -
+                     sum(A[row,row+1:num_cols] .* solution[row+1:num_cols]))/A[row,row]
 end
 
 function backSolve(A::Matrix, rhs::Array{Float64, 1})
@@ -120,10 +125,10 @@ function solveGivensQR(A,rhs)
     return backSolve(A,rhs)
 end
 
-function arnoldi(A::SparseMatrixCSC, v::Vector, m)
+function arnoldi(A::SparseMatrixCSC, v::Vector{T}, m) where T
     rows, cols = size(A)
-    orthonormal_vectors = zeros(Complex{Float64}, rows, m+1)
-    hessenberg_matrix = zeros(Complex{Float64}, m+1,m)
+    orthonormal_vectors = zeros(T, rows, m+1)
+    hessenberg_matrix = zeros(T, m+1,m)
     orthonormal_vectors[:,1] = v/norm(v)
     for j in 1:m
         vj = orthonormal_vectors[:,j]
@@ -256,33 +261,24 @@ dx = L/(number_of_nodes - 1)
 dt_rk4 = 5e-5
 dt_imex = 5e-5
 
-test_vector = [4.0 + 3im, 2.0 + im]
-cosine,sine = givensCoefficients(test_vector[2], test_vector[1])
 
-M = testMatrixComplex(10)
-rhs = rand(ComplexF64, 10)
 
-solution_direct = (M'*M)\(M'*rhs)
-solution_givens = solveGivensQR(M,rhs)
-#
-print("Error = ", norm(solution_direct - solution_givens))
-
-# domain = range(-L/2, stop = L/2, length = number_of_nodes)
-# initial_condition = analyticalSolution.(domain,0.0)
+domain = range(-L/2, stop = L/2, length = number_of_nodes)
+initial_condition = analyticalSolution.(domain,0.0)
 # analytical_solution = analyticalSolution.(domain,stop_time)
 #
-# laplacian = periodicLaplacian(dx, number_of_nodes)
-# imex_rhs = initial_condition + dt_imex/2*im*laplacian*initial_condition + dt_imex*nonlinearSchrodingerRHS(initial_condition)
-# imex_matrix = I - dt_imex/2*im*laplacian
+laplacian = periodicLaplacian(dx, number_of_nodes)
+imex_rhs = initial_condition + dt_imex/2*im*laplacian*initial_condition + dt_imex*nonlinearSchrodingerRHS(initial_condition)
+imex_matrix = I - dt_imex/2*im*laplacian
 #
-# solution_direct = imex_matrix\imex_rhs
-# guess = zeros(length(imex_rhs))
-# subspace_dim = 20
+solution_direct = imex_matrix\imex_rhs
+guess = zeros(length(imex_rhs))
+subspace_dim = 20
 #
-# solution_gmres = runGMRES(imex_matrix, guess, imex_rhs, 20, subspace_dim)
+solution_gmres = runGMRES(imex_matrix, guess, imex_rhs, 20, subspace_dim)
 #
 #
-# println("GMRES error = ", norm(solution_direct - solution_gmres))
+println("GMRES error = ", norm(solution_direct - solution_gmres))
 
 # rk4_solution = runStepsRK4(initial_condition, laplacian, dt_rk4, stop_time)
 # println("Error = ", maximum(abs.(rk4_solution - analytical_solution)))
