@@ -154,22 +154,22 @@ function solveEfficientCG(A::SparseMatrixCSC, rhs::AbstractArray; tol = 1e-8)
     return solution, count
 end
 
-number_of_nodes = 201
-dx = 1.0/(number_of_nodes-1)
-A = poissonOperator(number_of_nodes, dx)
-rhs = poissonRHS(number_of_nodes, dx)
-@time U = A\rhs
-@time U_CG, countCG = solveCG(A, rhs)
-@time U_eff_CG, count_effCG = solveEfficientCG(A, rhs)
+function plot_solution(solution, number_of_nodes)
+    U = reshape(solution, number_of_nodes, number_of_nodes)
+    X, Y = constructDomain(number_of_nodes)
+    fig, ax = PyPlot.subplots()
+    ax.contourf(X,Y,U)
+    fig
+end
 
-err1 = norm(U - U_CG)
-err2 = norm(U - U_eff_CG)
-println("Errors: $err1, $err2")
-
-# U = reshape(U, number_of_nodes, number_of_nodes)
-# U_CG = reshape(U_CG, number_of_nodes, number_of_nodes)
-U_eff_CG = reshape(U_eff_CG, number_of_nodes, number_of_nodes)
-X, Y = constructDomain(number_of_nodes)
-fig, ax = PyPlot.subplots()
-ax.contourf(X,Y,U_eff_CG)
-fig
+# number_of_nodes = 201
+# dx = 1.0/(number_of_nodes-1)
+# A = poissonOperator(number_of_nodes, dx)
+# rhs = poissonRHS(number_of_nodes, dx)
+# @time U = A\rhs
+# @time U_CG, countCG = solveCG(A, rhs)
+# @time U_eff_CG, count_effCG = solveEfficientCG(A, rhs)
+#
+# err1 = norm(U - U_CG)
+# err2 = norm(U - U_eff_CG)
+# println("Errors: $err1, $err2")
