@@ -9,13 +9,20 @@ function givensCoefficients(sub_diagonal_entry::Real, diagonal_entry::Real)
     return cosine, sine
 end
 
+# function givensCoefficients(sub_diagonal_entry::Complex, diagonal_entry::Complex)
+#     s0 = conj(sub_diagonal_entry)
+#     c0 = conj(diagonal_entry)
+#     magnitude = sqrt(norm(c0)^2 + norm(s0)^2)
+#     c = c0/magnitude
+#     s = s0/magnitude
+#     return c, s
+# end
+
 function givensCoefficients(sub_diagonal_entry::Complex, diagonal_entry::Complex)
-    s0 = conj(sub_diagonal_entry)
-    c0 = conj(diagonal_entry)
-    magnitude = sqrt(norm(c0)^2 + norm(s0)^2)
-    c = c0/magnitude
-    s = s0/magnitude
-    return c, s
+    theta = atan(sub_diagonal_entry/diagonal_entry)
+    cosine = cos(theta)
+    sine = sin(theta)
+    return cosine, sine
 end
 
 function updateRows(matrix::Matrix, cosine::Real, sine::Real, row)
@@ -154,9 +161,8 @@ function solveLeastSquaresDirect(A::Matrix, rhs::Vector)
     return (A'*A)\(A'*rhs)
 end
 
-function stepGMRES(A::SparseMatrixCSC, guess::Vector, rhs::Vector, subspace_dim)
+function stepGMRES(A::SparseMatrixCSC, guess::Vector, residual::Vector, subspace_dim)
 
-    residual = rhs - A*guess
     beta = norm(residual)
     subspace_basis, hessenberg_matrix, subspace_dim = arnoldi(A, residual, subspace_dim)
     e = zeros(Complex{Float64}, subspace_dim+1)
@@ -172,9 +178,29 @@ function runGMRES(A::SparseMatrixCSC, guess::Vector, rhs::Vector,
     niter, subspace_dim)
 
     solution = copy(guess)
+    residual = rhs - A*solution
     for iterations in 1:niter
-        solution = stepGMRES(A, solution, rhs, subspace_dim)
+        solution = stepGMRES(A, solution, residual, subspace_dim)
+        residual = rhs - A*solution
     end
+    return solution
+end
+
+function runGMRES(A::SparseMatrixCSC, guess::Vector, rhs::Vector;
+    tol = 1e-12, maxiter = 100, subspace_dim = 20)
+
+    solution = copy(guess)
+    residual = rhs - A*solution
+    count = 0
+    while norm(residual) > tol && count < maxiter
+        count = count + 1
+        solution = stepGMRES(A, solution, residual, subspace_dim)
+        residual = rhs - A*solution
+    end
+    if count == maxiter
+        @warn "GMRES failed to converge in $maxiter iterations"
+    end
+    println("\t #GMRES iterations = ", count)
     return solution
 end
 
@@ -210,13 +236,50 @@ function schrodingerRHS(u::Vector, laplacian::SparseMatrixCSC)
     return im*laplacian*u + nonlinearSchrodingerRHS(u)
 end
 
-function IMEX_rhs(u1::Vector, u0::Vector, laplacian::SparseMatrixCSC, dt)
-    rhs = u1 + dt/2*im*laplacian*u1 + dt/2*(3*nonlinearSchrodingerRHS(u1) -
+function IMEX_rhs_AB2(u1::Vector, u0::Vector, laplacian::SparseMatrixCSC, dt)
+    return u1 + dt/2*im*laplacian*u1 + dt/2*(3*nonlinearSchrodingerRHS(u1) -
                                        nonlinearSchrodingerRHS(u0))
+end
+
+function IMEX_rhs_Euler(u0::Vector, laplacian::SparseMatrixCSC, dt)
+    return u0 + dt/2*im*laplacian*u0 + dt*nonlinearSchrodingerRHS(u0)
 end
 
 function IMEX_matrix(laplacian::SparseMatrixCSC, dt)
     return I - dt/2*im*laplacian
+end
+
+function solveDirect(A, rhs)
+    return A\rhs
+end
+
+function stepIMEX(imex_matrix::SparseMatrixCSC,
+    laplacian::SparseMatrixCSC, u1::Vector, u0::Vector, dt)
+
+    imex_rhs = IMEX_rhs_AB2(u1, u0, laplacian, dt)
+    return solveDirect(imex_matrix, imex_rhs)
+end
+
+function runStepsIMEX(u0::Vector, laplacian::SparseMatrixCSC,
+    dt::AbstractFloat, stop_time::AbstractFloat)
+
+    ndofs = length(u0)
+    imex_matrix = IMEX_matrix(laplacian, dt)
+    imex_rhs = IMEX_rhs_Euler(u0, laplacian, dt)
+    # u1 = solveDirect(imex_matrix, imex_rhs)
+    u1 = runGMRES(imex_matrix, u0, imex_rhs)
+    u2 = copy(u1)
+    current_time = dt
+    while current_time < stop_time
+        println("Time = ", current_time)
+        current_time += dt
+        imex_rhs = IMEX_rhs_AB2(u1, u0, laplacian, dt)
+        # u2 = solveDirect(imex_matrix, imex_rhs)
+        u2 = runGMRES(imex_matrix, u1, imex_rhs)
+        u0 = u1
+        u1 = u2
+    end
+    return u2
 end
 
 function rk4Stages(solution::Vector, laplacian::SparseMatrixCSC,
@@ -249,6 +312,10 @@ function runStepsRK4(solution0::Vector, laplacian::SparseMatrixCSC,
     return solution
 end
 
+function computeError(u_numeric, u_analytic)
+    return maximum(abs.(u_numeric - u_analytic))
+end
+
 const L = 20.0
 const stop_time = 1.0
 const β = -8.0
@@ -262,25 +329,33 @@ dt_rk4 = 5e-5
 dt_imex = 5e-5
 
 
+M = testMatrix(10)
+rhs = rand(10)
+givensQR!(M,rhs)
 
-domain = range(-L/2, stop = L/2, length = number_of_nodes)
-initial_condition = analyticalSolution.(domain,0.0)
+
+# domain = range(-L/2, stop = L/2, length = number_of_nodes)
+# initial_condition = analyticalSolution.(domain,0.0)
+# u0 = initial_condition
 # analytical_solution = analyticalSolution.(domain,stop_time)
-#
-laplacian = periodicLaplacian(dx, number_of_nodes)
-imex_rhs = initial_condition + dt_imex/2*im*laplacian*initial_condition + dt_imex*nonlinearSchrodingerRHS(initial_condition)
-imex_matrix = I - dt_imex/2*im*laplacian
-#
-solution_direct = imex_matrix\imex_rhs
-guess = zeros(length(imex_rhs))
-subspace_dim = 20
-#
-solution_gmres = runGMRES(imex_matrix, guess, imex_rhs, 20, subspace_dim)
-#
-#
-println("GMRES error = ", norm(solution_direct - solution_gmres))
+# #
+# laplacian = periodicLaplacian(dx, number_of_nodes)
 
-# rk4_solution = runStepsRK4(initial_condition, laplacian, dt_rk4, stop_time)
-# println("Error = ", maximum(abs.(rk4_solution - analytical_solution)))
 
-# fig = plot_field(domain,real(solution))
+# imex_matrix = IMEX_matrix(laplacian, dt_imex)
+# imex_rhs = IMEX_rhs_Euler(u0, laplacian, dt_imex)
+#
+# u1_gmres = runGMRES(imex_matrix, u0, imex_rhs)
+#
+# imex_rhs = IMEX_rhs_AB2(u1_gmres, u0, laplacian, dt_imex)
+#
+# u2_direct = solveDirect(imex_matrix, imex_rhs)
+# u2_gmres = runGMRES(imex_matrix, u1_gmres, imex_rhs)
+#
+# println("Error = ", norm(u2_gmres - u2_direct))
+
+# imex_solution = runStepsIMEX(u0, laplacian, dt_imex, stop_time)
+# rk4_solution = runStepsRK4(u0, laplacian, dt_rk4, stop_time)
+# println("Max error IMEX = ", computeError(imex_solution, analytical_solution))
+# println("Max error RK4  = ", computeError(rk4_solution, analytical_solution))
+# fig = plot_field(domain,real(u))
