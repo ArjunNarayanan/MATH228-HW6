@@ -9,21 +9,21 @@ function givensCoefficients(sub_diagonal_entry::Real, diagonal_entry::Real)
     return cosine, sine
 end
 
-# function givensCoefficients(sub_diagonal_entry::Complex, diagonal_entry::Complex)
-#     s0 = conj(sub_diagonal_entry)
-#     c0 = conj(diagonal_entry)
-#     magnitude = sqrt(norm(c0)^2 + norm(s0)^2)
-#     c = c0/magnitude
-#     s = s0/magnitude
-#     return c, s
-# end
-
 function givensCoefficients(sub_diagonal_entry::Complex, diagonal_entry::Complex)
-    theta = atan(sub_diagonal_entry/diagonal_entry)
-    cosine = cos(theta)
-    sine = sin(theta)
-    return cosine, sine
+    s0 = conj(sub_diagonal_entry)
+    c0 = conj(diagonal_entry)
+    magnitude = sqrt(norm(c0)^2 + norm(s0)^2)
+    c = c0/magnitude
+    s = s0/magnitude
+    return c, s
 end
+
+# function givensCoefficients(sub_diagonal_entry::Complex, diagonal_entry::Complex)
+#     theta = atan(sub_diagonal_entry/diagonal_entry)
+#     cosine = cos(theta)
+#     sine = sin(theta)
+#     return cosine, sine
+# end
 
 function updateRows(matrix::Matrix, cosine::Real, sine::Real, row)
     num_rows, num_cols = size(matrix)
@@ -168,8 +168,8 @@ function stepGMRES(A::SparseMatrixCSC, guess::Vector, residual::Vector, subspace
     e = zeros(Complex{Float64}, subspace_dim+1)
     e[1] = beta
     H = hessenberg_matrix[1:subspace_dim+1,1:subspace_dim]
-    coefficients = solveLeastSquaresDirect(H,e)
-    # coefficients = solveGivensQR(H,e)
+    # coefficients = solveLeastSquaresDirect(H,e)
+    coefficients = solveGivensQR(H,e)
     V = subspace_basis[:,1:subspace_dim]
     return guess + V*coefficients
 end
@@ -325,21 +325,19 @@ const x0 = -3.0
 
 number_of_nodes = 1500
 dx = L/(number_of_nodes - 1)
-dt_rk4 = 5e-5
-dt_imex = 5e-5
+dt_rk4 = 1e-4
+dt_imex = 1e-3
 
 
-M = testMatrix(10)
-rhs = rand(10)
-givensQR!(M,rhs)
+# M = testMatrix(10)
+# rhs = rand(10)
+# givensQR!(M,rhs)
 
 
-# domain = range(-L/2, stop = L/2, length = number_of_nodes)
-# initial_condition = analyticalSolution.(domain,0.0)
-# u0 = initial_condition
-# analytical_solution = analyticalSolution.(domain,stop_time)
-# #
-# laplacian = periodicLaplacian(dx, number_of_nodes)
+domain = range(-L/2, stop = L/2, length = number_of_nodes)
+initial_condition = analyticalSolution.(domain,0.0)
+analytical_solution = analyticalSolution.(domain,stop_time)
+laplacian = periodicLaplacian(dx, number_of_nodes)
 
 
 # imex_matrix = IMEX_matrix(laplacian, dt_imex)
@@ -354,8 +352,8 @@ givensQR!(M,rhs)
 #
 # println("Error = ", norm(u2_gmres - u2_direct))
 
-# imex_solution = runStepsIMEX(u0, laplacian, dt_imex, stop_time)
+imex_solution = runStepsIMEX(u0, laplacian, dt_imex, stop_time)
 # rk4_solution = runStepsRK4(u0, laplacian, dt_rk4, stop_time)
-# println("Max error IMEX = ", computeError(imex_solution, analytical_solution))
+println("Max error IMEX = ", computeError(imex_solution, analytical_solution))
 # println("Max error RK4  = ", computeError(rk4_solution, analytical_solution))
 # fig = plot_field(domain,real(u))

@@ -214,8 +214,8 @@ broyden_alpha = 0.0001
 # step_size, err = getErrorVsStepSize(runGL2Iterations, A, b, S)
 # fig = plotErrorVsStepSize(step_size, err, title = "Error vs step size for RK4")
 
-Slist, err = getErrorVsS(A, b, S)
-plotError(Slist, err, xlabel = "S", slope = true)
+# Slist, err = getErrorVsS(A, b, S)
+# plotError(Slist, err, xlabel = "S", slope = true)
 
 # x = A\b
 # x = x/norm(x)
